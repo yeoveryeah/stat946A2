@@ -1,0 +1,161 @@
+---
+fontsize: 16pt
+geometry: margin = 1in
+linestretch: 1.5
+output: html_document
+---
+\newcommand{\var}{\mathrm{var}}
+\newcommand{\indep}{\perp \!\!\! \perp}
+\newcommand{\N}{{\mathcal N}}
+\newcommand{\iid}{\overset {\text{iid}} {\sim}}
+\newcommand{\IG}{\text{Inv-Gamma}}
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+require(rstan)
+```
+
+## Hierachical Model 
+
+
+$$
+y_i \mid \mu_i \iid \N (\mu_i, \sigma_i^2)\\
+\mu_i \mid \lambda,\tau \iid \N(\lambda, \tau^2)\\
+\pi(\lambda) \propto 1\\
+\tau^2 \sim \IG(1,1)
+$$
+
+* flat prior of pooled mean due to lack of information 
+
+* Inv-Gamma is conjugate prior with small choice of shape and scale. 
+
+```{r Sim}
+schools <- data.frame(school = LETTERS[1:8],
+                      estimate = c(28, 8, -3, 7, -1, 1, 18, 12),
+                      sd = c(15, 10, 16, 11, 9, 11, 10, 18))
+# hierarchical model is:
+# Xi | mui ~ind N(mui, sigi^2)
+# mui ~iid N(lambda, tau^2)
+sch_y <- schools$estimate
+sch_sd <- schools$sd
+N <- length(sch_y)
+```
+
+## Stan
+
+```{r readRds, echo=FALSE}
+sch <- readRDS('sch_fit.rds')
+sch_mod = sch$sch_mod
+sch_fit = sch$sch_fit
+stan_time = sch$stan_time
+rm(sch)
+```
+
+```{r StanSetup, eval=FALSE}
+require(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = 1) #have to setup, o/w my computer cannot run sampling
+# Compile the model
+sch_mod <- stan_model(file = "8schools.stan") 
+```
+
+```{r}
+# Construct log-posterior: 
+sch_data <- list(N = N, y = sch_y, sigma = sch_sd)
+sch_fit0 <- sampling(sch_mod, data = sch_data, iter = 1, 
+                    verbose = TRUE, chains = 1,
+                    init = list(list(lambda = 1, mu = rep(1.5,N), 
+                                     tau_sq = 5)))
+```
+
+
+```{r Stanlp}
+# log-post in R
+require(invgamma)
+logpost <- function(lambda, mu, tau_sq, y_sd, y) {
+  # Hyper-prior:
+  #  no need to include the log of flat prior
+  lp <- dinvgamma(tau_sq, shape = 1, scale = 1, log = TRUE)
+  # Prior:
+  lp <- lp + sum(dnorm(mu, mean = lambda, sd= sqrt(tau_sq), log = TRUE))
+  # likelihood:
+  lp <- lp + sum(dnorm(y, mean = mu, sd = y_sd, log = TRUE)) 
+  # output: 
+  lp
+}
+
+# Simulate parameter values:
+# fixed lambda and tau_sq to get constant difference between
+# R and stan
+nsim <- 18
+Pars <- replicate(n = nsim, expr = {
+    list(lambda = rexp(1), mu = rnorm(N), tau_sq = rexp(1)*5)
+}, simplify = FALSE)
+
+# log-posterior calculation in R
+lpR <- sapply(1:nsim, function(ii) {
+  lambda <- Pars[[ii]]$lambda 
+  mu <- Pars[[ii]]$mu 
+  tau_sq <- Pars[[ii]]$tau_sq
+  logpost(lambda = lambda, mu = mu, tau_sq = tau_sq, 
+          y_sd = sch_data$sigma, y = sch_data$y)
+})
+
+# log-posterior in Stan
+lpStan <- sapply(1:nsim, function(ii) {
+  upars <- unconstrain_pars(object = sch_fit0, Pars[[ii]])
+  log_prob(object = sch_fit0, upars = upars, adjust_transform = FALSE)
+})
+
+lpR-lpStan # return exactly same constant
+
+-N*log(sqrt(2*pi))- sum(log(sqrt(2*pi)*sch_sd)) # constant term dropped by Stan
+```
+
+```{r StanRun, eval=FALSE}
+# sampling
+nsamples <- 1e4
+stan_time <- system.time(
+  sch_fit <- sampling(sch_mod, data = sch_data, 
+                      iter = nsamples, control = list(adapt_delta = 0.99)))
+# extract MCMC samples
+sch_post <- extract(sch_fit)
+# 
+```
+
+```{r TBdeleted, include=FALSE, eval=FALSE}
+saveRDS(list(sch_mod = sch_mod, sch_fit = sch_fit, stan_time = stan_time), file = 'sch_fit.rds')
+```
+
+```{r}
+sch_post <- extract(sch_fit)
+names(sch_post) 
+theta <- c("lambda","tau_sq", "lp__")
+theta.names <- c(paste0('lambda'),  
+                 paste0('tau^2'), paste0('log-post'))
+theta.names <- parse(text = theta.names)
+stan_dens(sch_fit, pars = theta, separate_chains = TRUE)
+stan_dens(sch_fit, pars = c('mu'), separate_chains = TRUE)
+```
+
+```{r StanRand}
+par(mfrow=c(2,4))
+for(ii in 1:8) {
+  hist(sch_post$mu[,ii],  main = paste("School", LETTERS[ii]),
+       breaks = 30, xlim = c(-20,40), probability = TRUE,
+       xlab = bquote(mu[.(ii)]))
+  # add observed treatment effects of 8 schools
+  abline(v = sch_y[ii], lty = 2, lwd = 2, col = 'red')
+}
+mtext(side = 3, line = .5, outer = TRUE,
+      text = "Posterior School Distribution")
+
+```
+
+
+
+
+
+## 
+
