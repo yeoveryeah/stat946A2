@@ -10,6 +10,16 @@ output: html_document
 \newcommand{\iid}{\overset {\text{iid}} {\sim}}
 \newcommand{\IG}{\text{Inv-Gamma}}
 
+**message from Silvia**:
+Hi Martin,
+
+I tried to modify the hierarchical normal Model of the 8schools example and implement a simulation study. The model structure, data simulation and Stan code for model fitting are given below in this document. The log-posterior in R and Stan are checked. However, I've tried loads of times today and it took really long for each run of sampling() and, with many divergent transitions and some other warnings, I've not got an acceptable fit yet. It suggests to increase the nsamplers and chains, but considering my computer is almost burning up, I only tried up to nsamples = 1e6, chains =5. 
+
+Do you have any suggestion for this set-up? Also, I'm wondering if i could proceed with the 8schools example for this assignment as an option. I got some pleasant results with the 8schools data (relative file are in the sub-folder). 
+
+Thank you!
+Silvia
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -133,6 +143,4 @@ pairs(hnm_post)
 # stan_dens(hnm_fit, pars = theta, separate_chains = TRUE)
 ```
 
-
-## 
 
