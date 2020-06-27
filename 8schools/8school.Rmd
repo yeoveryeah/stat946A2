@@ -73,6 +73,7 @@ sch_fit0 <- sampling(sch_mod, data = sch_data, iter = 1,
 ```{r Stanlp}
 # log-post in R
 require(invgamma)
+#' The log-posterior function of the He
 logpost <- function(lambda, mu, tau_sq, y_sd, y) {
   # Hyper-prior:
   #  no need to include the log of flat prior
@@ -155,7 +156,4 @@ mtext(side = 3, line = .5, outer = TRUE,
 
 
 
-
-
-## 
 
