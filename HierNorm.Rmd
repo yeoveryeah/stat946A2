@@ -1,8 +1,15 @@
 ---
+title: "Hamiltonian Monte Carlo for Hierarchical Models"
+author: "Ye Meng"
+date: "`r format(Sys.Date(), format = '%B %d, %Y')`"
 fontsize: 16pt
 geometry: margin = 1in
 linestretch: 1.5
-output: html_document
+urlcolor: blue
+link-citations: yes
+citecolor: blue
+linkcolor: blue
+output: bookdown::html_document2
 ---
 \newcommand{\var}{\mathrm{var}}
 \newcommand{\indep}{\perp \!\!\! \perp}
@@ -10,137 +17,268 @@ output: html_document
 \newcommand{\iid}{\overset {\text{iid}} {\sim}}
 \newcommand{\IG}{\text{Inv-Gamma}}
 
-**message from Silvia**:
-Hi Martin,
-
-I tried to modify the hierarchical normal Model of the 8schools example and implement a simulation study. The model structure, data simulation and Stan code for model fitting are given below in this document. The log-posterior in R and Stan are checked. However, I've tried loads of times today and it took really long for each run of sampling() and, with many divergent transitions and some other warnings, I've not got an acceptable fit yet. It suggests to increase the nsamplers and chains, but considering my computer is almost burning up, I only tried up to nsamples = 1e6, chains =5. 
-
-Do you have any suggestion for this set-up? Also, I'm wondering if i could proceed with the 8schools example for this assignment as an option. I got some pleasant results with the 8schools data (relative file are in the sub-folder). 
-
-Thank you!
-Silvia
-
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(eval = FALSE, message = FALSE, warning = FALSE)
 ```
 
 
-## Hierachical Model 
+Three probabilistic programming packages offering Hamiltonian Monte Carlo(HMC) are Stan, PyMC3 and NumPyro. They will be implemented on a hierarchical model, a type of multi-level models with hierarchical structure to the parameters, and systematically compared for efficiency and accuracy. 
+
+# Hierachical Model 
+
+From sampling perspective, the population of interest is divided into non-overlapping clusters and the population mean is the parameter of interest. Then, $y_i$'s are observed cluster means and $\mu_i$ are underlying cluster means, and hence $\lambda$ is the underlying population mean and the hierarchical model can be set up as follows:
+$$
+y_i \mid \mu_i \iid \N (\mu_i, \sigma^2),\quad i=1,\dots,N\\
+\mu_i \mid \lambda,\tau \iid \N(\lambda, \tau^2),\quad  \sigma^2\sim \IG(1,1)\\
+\tau^2 \sim \IG(1,1), \quad \pi(\lambda) \propto 1\\
+$$
+
+The parameters are the cluster means ( $\mu_i$) and residual variance ( $\sigma^2$) and the hyperparameters of the hierarchical model are the population ( $\lambda$) and the population variance ( $\tau^2$).
+
+The rationale behind the choice of their distributions are discussed:
+
+* It's further assumed that the sizes of the observed objects in each cluster are relatively large such that it's safe to have observed cluster means $y_i$ being normally distributed.
+
+* The non-informative prior for $\lambda$ is adpoted due to the lack of information of the population mean.
+
+* The population variance ( $\tau^2$) and residual variance ( $\sigma^2$) are assumed to follow the Inverse Gamma distribution,which is a conjugate prior of a normal distribution with known mean.
+
+The analytic posterior are therefore given by
 
 $$
-y_i \mid \mu_i \iid \N (\mu_i, \sigma^2)\\
-\mu_i \mid \lambda,\tau \iid \N(\lambda, \tau^2)\\
-\pi(\lambda) \propto 1\\
-\tau^2 \sim \IG(1,1), \quad \sigma^2 \sim \IG(1,1)
+\begin{align}
+p(\lambda, \tau^2, \mu_i,\sigma^2 \mid \boldsymbol y) &\propto \mathcal L( \mu_i, \sigma^2 \mid \boldsymbol y) \ p(\mu_i\mid \lambda, \tau^2) \ p(\sigma^2) \ p(\tau^2) \ p(\lambda) \\
+&\propto \prod_i \frac{1}{\sigma\sqrt{2\pi}} \exp(-\frac{(y_i - \mu_i)^2}{2\sigma^2}) \prod_i \frac{1}{\tau\sqrt{2\pi}} \exp(-\frac{(\mu_i - \lambda)^2}{2\tau^2}) \ \exp(-\sigma^2) \ \exp(-\tau^2) \\
+&\propto \prod_i \frac{1}{\sigma}\exp(-\frac{(y_i - \mu_i)^2}{2\sigma^2}) 
+\prod_i \frac{1}{\tau} \exp(-\frac{(\mu_i - \lambda)^2}{2\tau^2}) \ \exp(-\sigma^2) \ \exp(-\tau^2) \\
+(\#eq:lp)
+\end{align}
 $$
 
-* flat prior of pooled mean due to lack of information 
+The generated data are prepared as follows for the simulation study.
 
-* Inv-Gamma is conjugate prior with small choice of shape and scale. 
-
-* parameter of interest: $\lambda, \tau^2, \sigma^2$
-
-```{r Sim}
-set.seed(42)
-N <- 20
-sim_lam <- 3
-sim_tau2 <- 10
-sim_sig2 <- 0.01
-x <- rnorm(N, sd = sqrt(sim_tau2))
-y <- 3 + 5*x + rnorm(N, sd=sqrt(sim_sig2))
+```{r Sim, eval=TRUE}
+set.seed(42) # for reproducibility 
+N <- 20 # number of clusters
+true_lam <- 3 # true population mean
+true_tau2 <- 1.5 # true between-cluster variance
+true_sig2 <- 1.2 # true within-cluster variance 
+true_mu <-true_lam + sqrt(true_tau2)*rnorm(N) # true cluster means
+y <- true_mu + sqrt(true_sig2)*rnorm(N) # observed data input for models
 ```
 
-## Stan
+# Stan
 
-```{r StanSetup}
+This section will offer a step-by-step guide for estimating the parameters from the simulated data in Stan. Installation guidelines and useful online resources are listed in Section \@ref(sec:resstan)
+
+## Stan Modelling language
+
+The hierarchical model can be translated into Stan modeling language. Note that the hyper-prior for $\lambda$ is not specified in the `model` block, Stan will automatically nominate the uniform prior on its range, i.e. the real numbers, to it.
+
+```{r Stanfile, eval=FALSE}
+// HierNorm.stan
+data {
+  int<lower=1> N; // number of clusters in the population
+  real y[N]; // observed cluster means
+}
+parameters {
+  vector[N] mu_raw; //variables for non-centered parameterization
+  real lambda;
+  // variance are restricted to be positve:
+  real<lower=0.00001> tau_sq; // between-cluster variance
+  real<lower=0.00001> sigma_sq; // inter-cluster varaince
+}
+transformed parameters {
+  real<lower=0.00001> tau = sqrt(tau_sq);
+  real<lower=0.00001> sigma = sqrt(sigma_sq);
+  // implies mu ~ normal(lambda, tau)
+  vector[N] mu = lambda + tau * mu_raw;
+}
+model {
+  // hyperparameters:
+  //  lambda:
+  //    non-informative prior in Stan: uniform 
+  tau_sq ~ inv_gamma(1, 1);
+  // priors:
+  sigma_sq ~ inv_gamma(1, 1);
+  mu_raw ~ std_normal();
+  // likelihood:
+  y ~ normal(mu, sigma);
+}
+```
+
+The non-centered parameterization for $\mu_i$ are based on the fact that $\mu_i \overset {\text{iid}} {\sim} \mathcal N (\lambda, \tau^2)$ can be interpreted as
+$$
+\mu_i = \lambda + \tau z_i, \quad z_i \overset {\text{iid}} {\sim} \mathcal N (0,1)
+$$
+
+The non-centered parameterization is embraced to shift the correlation with the parameters to the hyperparameters and to improve the efficiency. The motivations and examples of reparameterization are discussed in the [Section 22.7](https://mc-stan.org/docs/2_23/stan-users-guide/reparameterization-section.html) of the Stan User's guide. 
+
+## Stan Model Fitting 
+
+The stanmodel object from the model specified in the Stan modeling language can be complied with the `stan_model()` function:
+
+```{r StanSetup, eval=TRUE}
 require(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = 1)
 # Compile the model
 hnm_mod <- stan_model(file = "HierNorm.stan") 
-# Construct log-posterior: 
-hnm_data <- list(N = N, y = y)
 ```
 
-```{r Stanlp}
-hnm_fit <- sampling(hnm_mod, data = hnm_data, iter = 1, 
-                    verbose = TRUE, chains = 1,
-                    init = list(list(lambda = 1, mu = rep(1.5,N), 
-                                     tau_sq = 5, sigma_sq = 1)))
-# log-post in R
-require(invgamma)
-logpost <- function(lambda, mu, tau_sq, sigma_sq, y) {
+### Correctness Check of Stan Model
+
+To ensure integrity, the Stan code shall be tested in the first place. For generic MCMC, checking that log-posterior is correct will suffice, which can be realized with `log_prob` and `expose_stan_functions` functions in rstan package.
+
+The stan model can be associated with the observations for log-posterior check by sampling for one iteration. For this purpose, the warnings produced by the `hnm_fit_init` can be ignored for now. 
+
+```{r StanInit, eval=TRUE}
+#  1. format data: 
+#   list with elements named exactly as "data" block in Stan
+hnm_data <- list(N = N, y = y)
+#  2. associate data with model:
+#   to do this, MCMC sample for one iteration.
+hnm_fit_init <- sampling(hnm_mod, data = hnm_data, iter = 1, 
+                         verbose = TRUE, chains = 1)
+```
+
+In R, the log-posterior are calculated with the `logpost` function defined below.
+
+```{r lpR, eval=TRUE}
+#' Log-Posterior Function
+#'
+#' @description  `logpost` returns the log-posterior of the hierarchical model given the parameter values and observations
+#'  
+#' @param lambda A real number, the hyperparameter
+#' @param mu_raw A vector of reals at the same length of y
+#' @param tau_sq A positive number, the hyperparameter
+#' @param sigma_sq A positive number
+#' @param y A vector of reals 
+#' @return The log-posterior values
+#' @details The hyper-prior are given by tau_sq ~ InverseGamma(1,1) and lambda ~ Uniform, where the constant uniform probability are eliminated in calculating the log-posterior.
+#' The prior are given by mu_raw ~ N(0,1 ) and sigma_sq InverseGamma(1,1), while the non-centered parameterization are implemented here. 
+#' The likelihood are given by the Normal(mu, sigma_sq)
+#' @import invgamma 
+#' @export
+logpost <- function(lambda, mu_raw, tau_sq, sigma_sq, y) {
+  require(invgamma)
   # Hyper-prior:
-  #  no need to include the log of flat prior
   lp <- dinvgamma(tau_sq, shape = 1, scale = 1, log = TRUE)
   # Prior:
   lp <- lp + dinvgamma(sigma_sq, shape = 1, scale = 1, log = TRUE)
-  lp <- lp + sum(dnorm(mu, mean = lambda, sd= sqrt(tau_sq), log = TRUE))
+  lp <- lp + sum(dnorm(mu_raw, log = TRUE))
   # likelihood:
+  mu <- lambda + sqrt(tau_sq) * mu_raw 
   lp <- lp + sum(dnorm(y, mean = mu, sd = sqrt(sigma_sq), log = TRUE)) 
   # output: 
   lp
 }
+```
 
-# Simulate parameter values
-# fixed lambda and tau_sq to get constant difference between
-# R and stan
-nsim <- 18
+
+
+With arbitrarily generated model parameters, it's expected that the R log-posterior and Stan log-posterior at these values differ by a constant. This constant is the summation of the constant additive term of the log-posterior, which are dropped by default in Stan.
+
+$$
+\log\left(
+\underbrace{(\frac{1}{\sqrt{2\pi}})^N}_{y_i \sim \N(\mu_i,\sigma^2)}
+\cdot \underbrace{(\frac{1}{\sqrt{2\pi}})^N}_{mu_i \sim \N(\lambda,\tau^2)}
+\cdot \underbrace{(\frac{1^1}{\Gamma(1)})^2}_{\sigma^2, \tau^2 \sim \IG(1,1)}\right)
+ = -2N\log(\sqrt{2\pi})
+$$
+
+```{r Stanlp, eval=TRUE}
+# Simulate parameter values:
+nsim <- 5 # number of simulations to conduct
+# randomly generated parameter values to check the correctness
 Pars <- replicate(n = nsim, expr = {
-    list(lambda = rexp(1), mu = rnorm(N), 
+    list(lambda = rexp(1), mu_raw = rnorm(N), 
          tau_sq = rexp(1)*5, sigma_sq = rexp(1)*2)
 }, simplify = FALSE)
 
-# log-posterior calculation in R
+# log-posterior calculation in R:
 lpR <- sapply(1:nsim, function(ii) {
   lambda <- Pars[[ii]]$lambda 
-  mu <- Pars[[ii]]$mu 
+  mu_raw <- Pars[[ii]]$mu_raw
   tau_sq <- Pars[[ii]]$tau_sq
   sigma_sq <- Pars[[ii]]$sigma_sq
-  logpost(lambda = lambda, mu = mu, tau_sq = tau_sq, 
+  logpost(lambda = lambda, mu_raw = mu_raw, tau_sq = tau_sq, 
           sigma_sq = sigma_sq, y = hnm_data$y)
 })
 
-# log-posterior in Stan
+# log-posterior calculation in Stan:
 lpStan <- sapply(1:nsim, function(ii) {
-  upars <- unconstrain_pars(object = hnm_fit, Pars[[ii]])
-  log_prob(object = hnm_fit, upars = upars, adjust_transform = FALSE)
+  upars <- unconstrain_pars(object = hnm_fit_init, Pars[[ii]])
+  log_prob(object = hnm_fit_init, upars = upars, adjust_transform = FALSE)
 })
 
 lpR-lpStan # return exactly same constant
 
--(2*N)*log(sqrt(2*pi)) # constant term dropped by Stan
+-(2*N)*log(sqrt(2*pi)) # Theoretical difference
 ```
 
-```{r StanRun, echo=FALSE}
+### Stan Model Fitting
+
+After being checked, the HMC sampling are implemented to make parameter inference.
+```{r StanRun}
 # sampling
 nsamples <- 1e5
-theta <- c("lambda","tau_sq","sigma_sq", "lp__")
 stan_time <- system.time(
-  hnm_fit <- sampling(hnm_mod, data = hnm_data, pars = theta,
-                      iter = nsamples, control = list(adapt_delta = 0.99, 
-                                                      max_treedepth = 15)))
+  hnm_fit <- sampling(hnm_mod, data = hnm_data, iter = nsamples, 
+                      control = list(adapt_delta = 0.99, max_treedepth = 15)))
 # extract MCMC samples
 hnm_post <- extract(hnm_fit)
-names(hnm_post) 
-pairs(hnm_post)
-
 ```
 
-```{r}
-# # saveRDS(list(hnm_post= hnm_post, hnm_data = hnm_data), 
-# # file = "hnm_post.rds")
-# # hnm_mcmc <- readRDS('hnmpost.rds')
-# # hnm_post <- hnm_mcmc$hnm_post
-# # rm(hnm_mcmc)
-# 
-# theta <- c("lambda","tau_sq","sigma_sq", "lp__")
-# theta.names <- c(paste0('lambda'),  paste0('tau^2'), 
-#                  paste0('sigma^2'),paste0('log-post'))
-# theta.names <- parse(text = theta.names)
-# theta.names
-# stan_dens(hnm_fit, pars = theta, separate_chains = TRUE)
+```{r, echo=FALSE, eval=TRUE}
+# saveRDS(list(hnm_fit= hnm_fit, stan_time = stan_time), file = "hnm_post.rds")
+require(rstan)
+hnm_mcmc <- readRDS('hnm_post.rds')
+hnm_fit <- hnm_mcmc$hnm_fit # MCMC samples
+stan_time <- hnm_mcmc$stan_time
+hnm_post <- extract(hnm_fit)
+rm(hnm_mcmc)
 ```
 
+### Convergence Diagnostic
 
+Before making parameter inference, the posterior predictive checks are employed to evaluate the fit of the model. 
+
+```{r StanTrace, eval=TRUE, fig.width=9, fig.cap='Trace plot of parameters from MCMC samples'}
+theta <- c("lambda","tau_sq","sigma_sq")
+stan_trace(hnm_fit, pars = theta) # trace plot 
+```
+
+The chains completely overlap with each other, which is evidence that the MCMC has converged. 
+
+```{r StanDens, eval=TRUE, fig.width=9, fig.cap='Density estimates'}
+stan_dens(hnm_fit, pars = theta, separate_chains = TRUE) #kernel density estimates
+```
+
+### Parameter Inference
+
+```{r lambda, eval=TRUE}
+# plot the histogram of the MCMC samples of population mean
+lambda_post = hnm_post$lambda
+hist(lambda_post, breaks = 80, probability = TRUE, col = 'white',
+     main = 'Posterior of Population Mean', xlab = expression(lambda), ylim=c(0,0.8))
+abline(v = true_lam, lty = 1, lwd = 2, col = 'red') # True population mean
+abline(v = mean(hnm_post$lambda), lty = 2, lwd = 2, col = 'orange') # Posterior mean
+legend("right", col = c("red", "orange"), c("True Mean","Mean of Posterior"), 
+       lty = c(1,2), cex = 1, bty='n')# add legends
+```
+
+## Resources for Stan {#sec:resstan}
+
+* [Stan Installation Instructions](https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started) provides a quick tutorial for downloading, installing, and getting started with RStan on all platforms.
+
+* [Stan User's Guide](https://mc-stan.org/docs/2_22/stan-users-guide/index.html) is the official user’s guide for Stan and provides examples for coding statistical models in Stan. 
+
+* [Stan Reference Manual](https://mc-stan.org/docs/2_23/reference-manual/index.html) specifies the programming language, inference algorithms and posterior analysis tools.
+
+* [Stan Functions Reference](https://mc-stan.org/docs/2_23/functions-reference/index.html) provides a list of defined functions and distributions in the Stan math library and available in the Stan programming language.
+
+# PyMC3
+
+# NumPyro
