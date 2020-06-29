@@ -1,6 +1,8 @@
 import numpyro as po 
-import numpy as np
+from numpyro.infer import MCMC, NUTS
 import numpyro.distributions as dist
+from jax import random
+import numpy as np
 import matplotlib.pyplot as plt
 import rpy2.robjects as robjects
 
@@ -21,20 +23,22 @@ true_sig2 = 1.2
 y = data
 nsamples = 1e4
 
-def hnm_mod(y = None, N):
+def hnm_mod(N, y = None):
+    # hyper-prior
     lam_tilde = po.sample('lam_tilde', dist.Normal(0,1))
-    tau2 = po.sample('tau2', dist.InverseGamma(1))
-    sigam2 = po.sample('sigma2', dist.InverseGamma(1))
+    tau_sq = po.sample('tau_sq', dist.InverseGamma(1))
+    # prior
+    sigma_sq = po.sample('sigma_sq', dist.InverseGamma(1))
+    # Likelihood
+    y_sd = po.deterministic('y_sd', np.sqrt(sigma_sq + tau_sq))
+    with po.plate('N', N):
+      L = po.sample('Likelihood', dist.Normal(lam, sigma = y_sd), obs=y)
+
+nuts_kernel = NUTS(hnm_mod, target_accept_prob=0.99, cha)
+mcmc = MCMC(nuts_kernel, num_warmup = nsamples/2, num_samples = nsamples/2, num_chains= 4)
+rng_key = random.PRNGKey(0)
+mcmc.run(rng_key, N, y = y)
+posterior_samples = mcmc.get_samples(group_by_chain=TRue)
 
 
-lam_tilde = pm.Normal('lambda_tilde', mu=0, sigma=1)
-  lam = pm.Deterministic('lambda', 10 * lam_tilde)
-  tau2 = pm.InverseGamma('tau2', alpha= 1.0 , beta= 1.0)
-  # prior
-  #mu_raw = pm.Normal('mu_raw', mu=0,sigma=1)
-  #mu = pm.Deterministic('mu', lam + np.sqrt(tau2)*mu_raw)
-  sigma2 = pm.InverseGamma('sigma2', alpha=1.0, beta=1.0)
-  # Likelihood
-  y_sd = pm.Deterministic('y_sd', np.sqrt(sigma2 + tau2))
-  L = pm.Normal('Likelihood', lam, sigma= y_sd, observed=y)
   
