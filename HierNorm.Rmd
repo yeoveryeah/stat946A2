@@ -22,7 +22,7 @@ output: bookdown::html_document2
 knitr::opts_chunk$set(eval = FALSE, message = FALSE, warning = FALSE)
 ```
 
-Stan, PyMC3 and NumPyro packages offer Hamiltonian Monte Carlo (HMC) and No-U-Turn Sampler (NUTS) for efficient MCMC sampling. In this example, the performance of NUTS algorithm in the three probabilistic programming packages will be evaluated with a simulation study. Firstly, The hierarchical model and data simulation will be articulated in Section \@ref(sec:hnm). Then, the process of model fitting and sampling in Stan(See Section \@ref(sec:hnm-stan)), PyMC3(See Section \@ref(sec:hnm-pymc3)) and NumPyro(See Section \@ref(sec:hnm-pyro)) will be streamlined and systematic comparison and concluding remarks will be raised in Section \@ref(sec:hnm-conclu).
+Stan, PyMC3 and NumPyro packages offer Hamiltonian Monte Carlo (HMC) and No-U-Turn Sampler (NUTS) for efficient MCMC sampling. In this example, the performance of NUTS algorithm in the three probabilistic programming packages will be evaluated with a simulation study. Firstly, The hierarchical model and data simulation will be articulated in Section \@ref(sec:hnm). Then, the process of model fitting and sampling in Stan(See Section \@ref(sec:hnm-stan)), PyMC3(See Section \@ref(sec:hnm-pymc3)) and NumPyro(See Section \@ref(sec:hnm-pyro)) will be streamlined. Concluding remarks will be raised in Section \@ref(sec:hnm-conclu).
 
 ## Hierachical Model{#sec:hnm}
 
@@ -43,9 +43,9 @@ y_i \mid \mu_i \iid \N (\mu_i, \sigma^2),\quad i=1,\dots,N\\
 \lambda \sim \N(0, 100),\quad \tau^2 \sim \IG(1,1)\\
 $$
 
-The rationale behind the choice of their distributions are discussed:
+($\mu_i, \sigma^2$) are parameters of the model and ($\lambda, \tau^2$) are hyperparameters. The rationale behind the choice of their distributions are:
 
-* The weakly weakly informative prior prior for $\lambda$ is adopted due to the lack of information of the population mean.
+* The weakly informative prior for $\lambda$ is adopted due to the lack of information of the population mean.
 
 * The population variance ( $\tau^2$) and residual variance ( $\sigma^2$) are assumed to follow the Inverse Gamma distribution,which is a conjugate prior of a normal distribution with known mean.
 
@@ -96,7 +96,7 @@ y = np.array([float(line.strip('\n')) for line in d.readlines()])
 
 This section will offer a step-by-step guide for estimating the parameters from the simulated data in Stan. Installation guidelines and useful online resources are listed:
 
-* [Stan Installation Instructions](https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started) provides a quick tutorial for downloading, installing, and getting started with RStan on all platforms.
+* [Stan Installation Instructions](https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started) provides a quick tutorial for downloading, installing, and getting started with Stan on all platforms.
 
 * [Stan User's Guide](https://mc-stan.org/docs/2_22/stan-users-guide/index.html) is the official user’s guide for Stan and provides examples for coding statistical models in Stan. 
 
@@ -114,7 +114,7 @@ cat("```stan", readLines("HierNorm.stan"), "```", sep = "\n")
 ```
 
 
-The the model specified in the Stan modeling language can be complied with the `stan_model()` function to construct a stanmodel object:
+The the model specified in the Stan modeling language can be complied with the `stan_model()` function in [rstan package](https://cran.r-project.org/web/packages/rstan/index.html) to construct a `stanmodel` object:
 
 ```{r hnm-stan-Setup, eval=TRUE}
 require(rstan)
@@ -142,7 +142,7 @@ In R, the log-posterior are calculated with the `logpost` function defined below
 ```{r hnm-lpR, eval = TRUE,code=xfun::read_utf8('logpost.R')}
 ```
 
-With arbitrarily generated model parameters, it's expected that the R log-posterior and Stan log-posterior at these values differ by a constant. This constant is the summation of the constant additive term of the log-posterior, which are dropped by default in Stan.
+With arbitrarily generated model parameters, it's expected that the R log-posterior and Stan log-posterior at these values differ by a constant. This constant is the summation of the constant additive terms of the log-posterior, which are dropped by default in Stan.
 
 $$
 \log\left(
@@ -222,7 +222,7 @@ dens <- stan_dens(hnm_fit, pars = theta, separate_chains = TRUE, ncol = 1) #kern
 gridExtra::grid.arrange(dens,trace, ncol = 2) # arrange the plots
 ```
 
-The summary statistics of chain-merged posterior samples per parameter are produced. The mean posterior estimate of lambda are close to the true value while that of the other parameter bias from the true values. 
+The summary statistics of chain-merged posterior samples per parameter are produced. The mean posterior estimate of population mean $\lambda$ are close to the true value while that of the other parameter bias from the true values. 
 ```{r hnm-stan-summ, eval=TRUE}
 # selected posterior summaries for each of the parameters:
 summary(hnm_fit, pars= theta)$summary[,c(1,3,9,10)]
@@ -262,6 +262,7 @@ The `with` statement will create a context manager, where the `hnm_mod` is the c
 with pm.Model() as hnm_mod:  
   # hyper-priors:
   lam_tilde = pm.Normal('lambda_tilde', mu=0, sigma=1)
+  # implies lambda ~ N(0,sd =10)
   lam = pm.Deterministic('lambda', 10 * lam_tilde)
   tau_sq = pm.InverseGamma('tau_sq', alpha= 1.0 , beta= 1.0)
   # prior:
@@ -271,7 +272,7 @@ with pm.Model() as hnm_mod:
   L = pm.Normal('Likelihood', lam, sigma= y_sd, observed=y)
 ```
 
-For efficient MCMC sampling, PyMC3 will automatically transform constrained continuous variables to unconstrained variable. The [transforms.log](https://docs.pymc.io/api/distributions/transforms.html#pymc3.distributions.transforms.Transform) is implemented to the positive variables $\tau^2$ and $\sigma^2$. This can be further confirmed by checking with the attribute `hnm_mod.vars`, where modified variable names is 'tau_sq_log__' and 'sigma_sq_log__' instead of 'tau_sq' and 'sigma_sq'. It's not recommended to set `transformation = None` in the constrained variables; if the transformation were deserted, warnings or divergence would deter the sampling process.
+For efficient MCMC sampling, PyMC3 will automatically transform constrained continuous variables to unconstrained scale The [transforms.log](https://docs.pymc.io/api/distributions/transforms.html#pymc3.distributions.transforms.Transform) is implemented to the positive variables $\tau^2$ and $\sigma^2$. This can be further confirmed by checking with the attribute `hnm_mod.vars`, where modified variable names is `tau_sq_log__` and `sigma_sq_log__` instead of `tau_sq` and `sigma_sq`. It's not recommended to set `transformation = None` in the constrained variables; if the transformation were deserted, warnings or divergence would deter the sampling process.
 
 To check the correctness of the model in PyMC3, the log-posterior are checked against that in R at the same parameter values. It's been validated that the log-posterior in PyMC3 using `log_nojac` will produce the same value as in R using `logpost()`. 
 
@@ -286,6 +287,7 @@ print(logp_nojac({'lambda_tilda': 1, 'tau_sq_log__': np.log(5), 'sigma_sq_log__'
 Note that `logp` will return log posterior of the model including the Jacobian terms of transformed variables. However, the Jacobian of the transformation are required when using different parameterizations for the same distribution. The the transformation of $\tau^2$ and $\sigma^2$ makes the estimates invariant with respect to the parameterization and the Jacobian term shall be excluded from log posteriors. This can be checked with the following code such that the difference will agree with the Jacobian terms.
 
 ```{python hnm-pymc3-jacobian}
+# e.g. lam_tilde = 1; tau_sq = 5, sigma_sq = 4
 # log-posterior including log of jacobian determinants of transformed variables
 logp = hnm_mod.logp 
 print(logp({'lambda_tilda': 1, 'tau_sq_log__': np.log(5), 'sigma_sq_log__': np.log(4)}))
@@ -310,7 +312,7 @@ It takes around 80~90 seconds to complete the sampling process.
 
 ### Diagnostic 
 
-[PyMC3 ploting](https://docs.pymc.io/api/plots.html) provides visualization tool for . Plots are delegated to the [ArviZ libaray](https://arviz-devs.github.io/arviz/). The trace plot and the posterior plot in this section will be produced with ArviZ methods, while the alternatives in PyMC3 will be provided in code comment.
+[PyMC3 ploting](https://docs.pymc.io/api/plots.html) provides visualization tools in PyMC3 packages, where plots are delegated to the [ArviZ libaray](https://arviz-devs.github.io/arviz/). The trace plot and the posterior plot in this section will be produced with ArviZ methods, while the alternatives in PyMC3 will be provided in code comment. 
 
 Both the density plot and trace plot in Figure \@ref(fig:hnm-pymc3-trace-p) evidence that the chains completely overlap with each other and the MCMC has converged.
 
@@ -347,9 +349,15 @@ knitr::include_graphics('post_pymc3.png')
 
 ## NumPyro {#sec:hnm-pyro}
 
-This section will implement the MCMC sampling with NumPyro packages, installation and examples are provided in [Pyro project on NumPy](https://pypi.org/project/numpyro/) and [NumPyro documentation](http://num.pyro.ai/en/stable/#).
+This section will implement the MCMC sampling with NumPyro packages, 
 
-The intact code snippet can be found in Section \@ref(sec:hnm-pyrocode) and packages used the are listed below:
+* [Pyro project on NumPy](https://pypi.org/project/numpyro/) provides installation guide and examples.
+
+* [NumPyro documentation](http://num.pyro.ai/en/stable/#) lists defined functions and distributions.
+
+* [NumPyro Tutorials](http://pyro.ai/numpyro/index.html) offers several code examples.
+
+The intact code snippet can be found in Section \@ref(sec:hnm-pyrocode) and the packages used in this example are listed below:
 
 ```{python hnm-pyro-pkg}
 import numpyro as po 
@@ -366,9 +374,7 @@ import os
 
 ### Build the Model 
 
-A list of continuous distribution are listed on the [website](http://num.pyro.ai/en/stable/distributions.html#continuous-distributions). Note that the rate parameter in the inverse gamma distribution is actually corresponding to the scale parameter in the [literatures](https://en.wikipedia.org/wiki/Inverse-gamma_distribution).
-
-A `sample` returns a random sample from the stochastic function specified. A `plate` context manager is constructed for annotating conditionally independent variables, the observations $y_i$'s.
+In NumPyro, the model code can be any Python callable. The `sample` primitive draws a random sample from the stochastic function specified. 
 
 ```{python hnm-pyro-mod}
 def hnm_mod(N, y = None):
@@ -389,7 +395,7 @@ def hnm_mod(N, y = None):
         y (array): the observed y
 
     Returns:
-        Posterior parameter estiamted by the model 
+        Float: Prediction of y by the model 
     """
     # hyper-prior
     lam_tilde = po.sample('lam_tilde', dist.Normal(0., 1.))
@@ -398,13 +404,19 @@ def hnm_mod(N, y = None):
     # prior
     sigma_sq = po.sample('sigma_sq', dist.InverseGamma(concentration=1, rate=1))
     # Likelihood
+    # `plate` is a context manager: 
+    #   constructed for annotating conditionally independent observations y.
     with po.plate("N", N):
         y_sd = po.deterministic('y_sd', np.sqrt(sigma_sq + tau_sq))
         po.sample('Likelihood', dist.Normal(loc=lam, scale=y_sd), obs=y)
 ```
 
-To check the log-posterior, `log_density` method can be applied and the model are implemented correctly.
+Note that the rate parameter in the inverse gamma distribution is actually corresponding to the scale parameter in the [literatures](https://en.wikipedia.org/wiki/Inverse-gamma_distribution).
+
+`log_density` method will return the log-posterior of the model at given parameter values and can be applied to investigate the log-posterior against in R. The model has been convinced by random sets of parameter values. The example code is given by:
+
 ```{python hnm-pyro-lpcheck}
+# e.g. lam_tilde = 1.8; tau_sq = 4.6, sigma_sq = 4
 #  the log_density function will return 
 #     1. the log posterior values at the given parameter values
 #     2. and a corresponding model trace
@@ -420,7 +432,7 @@ The sampling in NumPyro are completed by the following steps:
 
 1. Assign the NUTS sampler to MCMC
 
-2. Provides access to MCMC inference algorithms in NumPyro.
+2. Provide access to MCMC inference algorithms in NumPyro.
 
 3. Run the NUTS sampler with a specified random number generator key.
 

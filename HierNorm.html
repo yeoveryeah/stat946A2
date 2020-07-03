@@ -11,7 +11,7 @@
 
 <meta name="author" content="Ye Meng" />
 
-<meta name="date" content="2020-07-01" />
+<meta name="date" content="2020-07-03" />
 
 <title>Hamiltonian Monte Carlo for Hierarchical Models</title>
 
@@ -365,13 +365,13 @@ summary {
 
 <h1 class="title toc-ignore">Hamiltonian Monte Carlo for Hierarchical Models</h1>
 <h4 class="author">Ye Meng</h4>
-<h4 class="date">July 01, 2020</h4>
+<h4 class="date">July 03, 2020</h4>
 
 </div>
 
 
 
-<p>Stan, PyMC3 and NumPyro packages offer Hamiltonian Monte Carlo (HMC) and No-U-Turn Sampler (NUTS) for efficient MCMC sampling. In this example, the performance of NUTS algorithm in the three probabilistic programming packages will be evaluated with a simulation study. Firstly, The hierarchical model and data simulation will be articulated in Section <a href="#sec:hnm">0.1</a>. Then, the process of model fitting and sampling in Stan(See Section <a href="#sec:hnm-stan">0.2</a>), PyMC3(See Section <a href="#sec:hnm-pymc3">0.3</a>) and NumPyro(See Section <a href="#sec:hnm-pyro">0.4</a>) will be streamlined and systematic comparison and concluding remarks will be raised in Section <a href="#sec:hnm-conclu">0.5</a>.</p>
+<p>Stan, PyMC3 and NumPyro packages offer Hamiltonian Monte Carlo (HMC) and No-U-Turn Sampler (NUTS) for efficient MCMC sampling. In this example, the performance of NUTS algorithm in the three probabilistic programming packages will be evaluated with a simulation study. Firstly, The hierarchical model and data simulation will be articulated in Section <a href="#sec:hnm">0.1</a>. Then, the process of model fitting and sampling in Stan(See Section <a href="#sec:hnm-stan">0.2</a>), PyMC3(See Section <a href="#sec:hnm-pymc3">0.3</a>) and NumPyro(See Section <a href="#sec:hnm-pyro">0.4</a>) will be streamlined. Concluding remarks will be raised in Section <a href="#sec:hnm-conclu">0.5</a>.</p>
 <div id="sec:hnm" class="section level2">
 <h2><span class="header-section-number">0.1</span> Hierachical Model</h2>
 <p>From sampling perspective, the population of interest is divided into non-overlapping clusters, where <span class="math inline">\(y_i\)</span>’s are observed value in cluster <span class="math inline">\(i\)</span> and <span class="math inline">\(\mu_i\)</span> are underlying cluster means. The <a href="https://en.wikipedia.org/wiki/Random_effects_model">random effects model</a> is given by</p>
@@ -388,9 +388,9 @@ y_i \mid \mu_i \overset {\text{iid}} {\sim}{\mathcal N}(\mu_i, \sigma^2),\quad i
 \mu_i \mid \lambda,\tau \overset {\text{iid}} {\sim}{\mathcal N}(\lambda, \tau^2),\quad  \sigma^2\sim \text{Inv-Gamma}(1,1)\\
 \lambda \sim {\mathcal N}(0, 100),\quad \tau^2 \sim \text{Inv-Gamma}(1,1)\\
 \]</span></p>
-<p>The rationale behind the choice of their distributions are discussed:</p>
+<p>(<span class="math inline">\(\mu_i, \sigma^2\)</span>) are parameters of the model and (<span class="math inline">\(\lambda, \tau^2\)</span>) are hyperparameters. The rationale behind the choice of their distributions are:</p>
 <ul>
-<li><p>The weakly weakly informative prior prior for <span class="math inline">\(\lambda\)</span> is adopted due to the lack of information of the population mean.</p></li>
+<li><p>The weakly informative prior for <span class="math inline">\(\lambda\)</span> is adopted due to the lack of information of the population mean.</p></li>
 <li><p>The population variance ( <span class="math inline">\(\tau^2\)</span>) and residual variance ( <span class="math inline">\(\sigma^2\)</span>) are assumed to follow the Inverse Gamma distribution,which is a conjugate prior of a normal distribution with known mean.</p></li>
 </ul>
 <p>In computing, the non-centered parameterization will be embraced to shift the correlation with the parameters to the hyperparameters and to improve the efficiency.</p>
@@ -427,7 +427,7 @@ y = np.array([float(line.strip(&#39;\n&#39;)) for line in d.readlines()])</code>
 <h2><span class="header-section-number">0.2</span> Stan</h2>
 <p>This section will offer a step-by-step guide for estimating the parameters from the simulated data in Stan. Installation guidelines and useful online resources are listed:</p>
 <ul>
-<li><p><a href="https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started">Stan Installation Instructions</a> provides a quick tutorial for downloading, installing, and getting started with RStan on all platforms.</p></li>
+<li><p><a href="https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started">Stan Installation Instructions</a> provides a quick tutorial for downloading, installing, and getting started with Stan on all platforms.</p></li>
 <li><p><a href="https://mc-stan.org/docs/2_22/stan-users-guide/index.html">Stan User’s Guide</a> is the official user’s guide for Stan and provides examples for coding statistical models in Stan.</p></li>
 <li><p><a href="https://mc-stan.org/docs/2_23/reference-manual/index.html">Stan Reference Manual</a> specifies the programming language, inference algorithms and posterior analysis tools.</p></li>
 <li><p><a href="https://mc-stan.org/docs/2_23/functions-reference/index.html">Stan Functions Reference</a> provides a list of defined functions and distributions in the Stan math library and available in the Stan programming language.</p></li>
@@ -463,7 +463,7 @@ model {
   y ~ normal(lambda, y_sd);
 }
 </code></pre>
-<p>The the model specified in the Stan modeling language can be complied with the <code>stan_model()</code> function to construct a stanmodel object:</p>
+<p>The the model specified in the Stan modeling language can be complied with the <code>stan_model()</code> function in <a href="https://cran.r-project.org/web/packages/rstan/index.html">rstan package</a> to construct a <code>stanmodel</code> object:</p>
 <pre class="r"><code>require(rstan)
 rstan_options(auto_write = TRUE)
 # Compile the model
@@ -480,8 +480,8 @@ hnm_fit_init &lt;- sampling(hnm_mod, data = hnm_data, iter = 1,
 <pre><code>## 
 ## SAMPLING FOR MODEL &#39;HierNorm&#39; NOW (CHAIN 1).
 ## Chain 1: 
-## Chain 1: Gradient evaluation took 1.3e-05 seconds
-## Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 0.13 seconds.
+## Chain 1: Gradient evaluation took 1.2e-05 seconds
+## Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 0.12 seconds.
 ## Chain 1: Adjust your expectations accordingly!
 ## Chain 1: 
 ## Chain 1: 
@@ -491,22 +491,22 @@ hnm_fit_init &lt;- sampling(hnm_mod, data = hnm_data, iter = 1,
 ## Chain 1: Iteration: 1 / 1 [100%]  (Sampling)
 ## Chain 1: 
 ## Chain 1:  Elapsed Time: 0 seconds (Warm-up)
-## Chain 1:                2.7e-05 seconds (Sampling)
-## Chain 1:                2.7e-05 seconds (Total)
+## Chain 1:                2.5e-05 seconds (Sampling)
+## Chain 1:                2.5e-05 seconds (Total)
 ## Chain 1:</code></pre>
 <p>In R, the log-posterior are calculated with the <code>logpost</code> function defined below. This function will be referred to check the correctness of model in the other two packages as well.</p>
 <pre class="r"><code>#&#39; Log-Posterior Function
 #&#39;
 #&#39; @description  `logpost` returns the log-posterior of the hierarchical model given the parameter values and observations
 #&#39;  
-#&#39; @param lambda_tilda A real number, the hyperparameter
-#&#39; @param tau_sq A positive number, the hyperparameter
-#&#39; @param sigma_sq A positive number
-#&#39; @param y A vector of reals 
+#&#39; @param lambda_tilda  real number, the hyperparameter
+#&#39; @param tau_sq  positive number, the hyperparameter
+#&#39; @param sigma_sq positive number
+#&#39; @param y vector of reals 
 #&#39; @return The log-posterior values
 #&#39; @details The hyper-prior are given by tau_sq ~ InverseGamma(1,1) and lambda_tilda ~ N(0,1) such that lambda ~ N(0,100).
-#&#39; The prior are given by sigma_sq InverseGamma(1,1);
-#&#39; The likelihood are given by the Normal(lambda, sqrt(sigma_sq + tau_sq))
+#&#39; The prior are given by sigma_sq ~ InverseGamma(1,1);
+#&#39; The likelihood are given by the y ~ Normal(lambda, sqrt(sigma_sq + tau_sq))
 #&#39; @import invgamma 
 #&#39; @export
 logpost &lt;- function(lambda_tilda, tau_sq, sigma_sq, y) {
@@ -517,13 +517,13 @@ logpost &lt;- function(lambda_tilda, tau_sq, sigma_sq, y) {
   # Prior:
   lp &lt;- lp + dinvgamma(sigma_sq, shape = 1, scale = 1, log = TRUE)
   # likelihood:
-  lambda &lt;- 10*lambda_tilda
+  lambda &lt;- 10*lambda_tilda # implies lambda ~ N(0,100)
   y_sd &lt;- sqrt(sigma_sq+tau_sq)
   lp &lt;- lp + sum(dnorm(y, mean = lambda, sd = y_sd, log = TRUE)) 
   # output: 
   lp
 }</code></pre>
-<p>With arbitrarily generated model parameters, it’s expected that the R log-posterior and Stan log-posterior at these values differ by a constant. This constant is the summation of the constant additive term of the log-posterior, which are dropped by default in Stan.</p>
+<p>With arbitrarily generated model parameters, it’s expected that the R log-posterior and Stan log-posterior at these values differ by a constant. This constant is the summation of the constant additive terms of the log-posterior, which are dropped by default in Stan.</p>
 <p><span class="math display">\[
 \log\left(
 \underbrace{(\frac{1}{\sqrt{2\pi}})^N}_{y_i \sim {\mathcal N}(\mu_i,\sigma^2)}
@@ -588,7 +588,7 @@ gridExtra::grid.arrange(dens,trace, ncol = 2) # arrange the plots</code></pre>
 Figure 1: Density plot and trace plot per parameter per chain from MCMC samples by Stan
 </p>
 </div>
-<p>The summary statistics of chain-merged posterior samples per parameter are produced. The mean posterior estimate of lambda are close to the true value while that of the other parameter bias from the true values.</p>
+<p>The summary statistics of chain-merged posterior samples per parameter are produced. The mean posterior estimate of population mean <span class="math inline">\(\lambda\)</span> are close to the true value while that of the other parameter bias from the true values.</p>
 <pre class="r"><code># selected posterior summaries for each of the parameters:
 summary(hnm_fit, pars= theta)$summary[,c(1,3,9,10)]</code></pre>
 <pre><code>##              mean        sd    n_eff     Rhat
@@ -626,6 +626,7 @@ import os</code></pre>
 <pre class="python"><code>with pm.Model() as hnm_mod:  
   # hyper-priors:
   lam_tilde = pm.Normal(&#39;lambda_tilde&#39;, mu=0, sigma=1)
+  # implies lambda ~ N(0,sd =10)
   lam = pm.Deterministic(&#39;lambda&#39;, 10 * lam_tilde)
   tau_sq = pm.InverseGamma(&#39;tau_sq&#39;, alpha= 1.0 , beta= 1.0)
   # prior:
@@ -633,7 +634,7 @@ import os</code></pre>
   # Likelihood:
   y_sd = pm.Deterministic(&#39;y_sd&#39;, np.sqrt(sigma_sq + tau_sq))
   L = pm.Normal(&#39;Likelihood&#39;, lam, sigma= y_sd, observed=y)</code></pre>
-<p>For efficient MCMC sampling, PyMC3 will automatically transform constrained continuous variables to unconstrained variable. The <a href="https://docs.pymc.io/api/distributions/transforms.html#pymc3.distributions.transforms.Transform">transforms.log</a> is implemented to the positive variables <span class="math inline">\(\tau^2\)</span> and <span class="math inline">\(\sigma^2\)</span>. This can be further confirmed by checking with the attribute <code>hnm_mod.vars</code>, where modified variable names is ’tau_sq_log__’ and ’sigma_sq_log__’ instead of ‘tau_sq’ and ‘sigma_sq’. It’s not recommended to set <code>transformation = None</code> in the constrained variables; if the transformation were deserted, warnings or divergence would deter the sampling process.</p>
+<p>For efficient MCMC sampling, PyMC3 will automatically transform constrained continuous variables to unconstrained scale The <a href="https://docs.pymc.io/api/distributions/transforms.html#pymc3.distributions.transforms.Transform">transforms.log</a> is implemented to the positive variables <span class="math inline">\(\tau^2\)</span> and <span class="math inline">\(\sigma^2\)</span>. This can be further confirmed by checking with the attribute <code>hnm_mod.vars</code>, where modified variable names is <code>tau_sq_log__</code> and <code>sigma_sq_log__</code> instead of <code>tau_sq</code> and <code>sigma_sq</code>. It’s not recommended to set <code>transformation = None</code> in the constrained variables; if the transformation were deserted, warnings or divergence would deter the sampling process.</p>
 <p>To check the correctness of the model in PyMC3, the log-posterior are checked against that in R at the same parameter values. It’s been validated that the log-posterior in PyMC3 using <code>log_nojac</code> will produce the same value as in R using <code>logpost()</code>.</p>
 <pre class="python"><code># Example code for log-posterior 
 hnm_mod.vars # free variables in the model
@@ -641,7 +642,8 @@ hnm_mod.vars # free variables in the model
 logp_nojac = hnm_mod.logp_nojac 
 print(logp_nojac({&#39;lambda_tilda&#39;: 1, &#39;tau_sq_log__&#39;: np.log(5), &#39;sigma_sq_log__&#39;: np.log(4)}))</code></pre>
 <p>Note that <code>logp</code> will return log posterior of the model including the Jacobian terms of transformed variables. However, the Jacobian of the transformation are required when using different parameterizations for the same distribution. The the transformation of <span class="math inline">\(\tau^2\)</span> and <span class="math inline">\(\sigma^2\)</span> makes the estimates invariant with respect to the parameterization and the Jacobian term shall be excluded from log posteriors. This can be checked with the following code such that the difference will agree with the Jacobian terms.</p>
-<pre class="python"><code># log-posterior including log of jacobian determinants of transformed variables
+<pre class="python"><code># e.g. lam_tilde = 1; tau_sq = 5, sigma_sq = 4
+# log-posterior including log of jacobian determinants of transformed variables
 logp = hnm_mod.logp 
 print(logp({&#39;lambda_tilda&#39;: 1, &#39;tau_sq_log__&#39;: np.log(5), &#39;sigma_sq_log__&#39;: np.log(4)}))
 np.log(5) + np.log(4) # Jacobian terms = difference between logp and logp_nojac</code></pre>
@@ -659,7 +661,7 @@ with hnm_mod:
 </div>
 <div id="diagnostic-1" class="section level3">
 <h3><span class="header-section-number">0.3.3</span> Diagnostic</h3>
-<p><a href="https://docs.pymc.io/api/plots.html">PyMC3 ploting</a> provides visualization tool for . Plots are delegated to the <a href="https://arviz-devs.github.io/arviz/">ArviZ libaray</a>. The trace plot and the posterior plot in this section will be produced with ArviZ methods, while the alternatives in PyMC3 will be provided in code comment.</p>
+<p><a href="https://docs.pymc.io/api/plots.html">PyMC3 ploting</a> provides visualization tools in PyMC3 packages, where plots are delegated to the <a href="https://arviz-devs.github.io/arviz/">ArviZ libaray</a>. The trace plot and the posterior plot in this section will be produced with ArviZ methods, while the alternatives in PyMC3 will be provided in code comment.</p>
 <p>Both the density plot and trace plot in Figure <a href="#fig:hnm-pymc3-trace-p">3</a> evidence that the chains completely overlap with each other and the MCMC has converged.</p>
 <pre class="python"><code># Alternative: pm.traceplot()
 with hnm_mod:
@@ -756,8 +758,13 @@ with hnm_mod:
 </div>
 <div id="sec:hnm-pyro" class="section level2">
 <h2><span class="header-section-number">0.4</span> NumPyro</h2>
-<p>This section will implement the MCMC sampling with NumPyro packages, installation and examples are provided in <a href="https://pypi.org/project/numpyro/">Pyro project on NumPy</a> and <a href="http://num.pyro.ai/en/stable/#">NumPyro documentation</a>.</p>
-<p>The intact code snippet can be found in Section <a href="#sec:hnm-pyrocode">0.4.4</a> and packages used the are listed below:</p>
+<p>This section will implement the MCMC sampling with NumPyro packages,</p>
+<ul>
+<li><p><a href="https://pypi.org/project/numpyro/">Pyro project on NumPy</a> provides installation guide and examples.</p></li>
+<li><p><a href="http://num.pyro.ai/en/stable/#">NumPyro documentation</a> lists defined functions and distributions.</p></li>
+<li><p><a href="http://pyro.ai/numpyro/index.html">NumPyro Tutorials</a> offers several code examples.</p></li>
+</ul>
+<p>The intact code snippet can be found in Section <a href="#sec:hnm-pyrocode">0.4.4</a> and the packages used in this example are listed below:</p>
 <pre class="python"><code>import numpyro as po 
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS, util
@@ -770,8 +777,7 @@ import arviz as az
 import os</code></pre>
 <div id="build-the-model" class="section level3">
 <h3><span class="header-section-number">0.4.1</span> Build the Model</h3>
-<p>A list of continuous distribution are listed on the <a href="http://num.pyro.ai/en/stable/distributions.html#continuous-distributions">website</a>. Note that the rate parameter in the inverse gamma distribution is actually corresponding to the scale parameter in the <a href="https://en.wikipedia.org/wiki/Inverse-gamma_distribution">literatures</a>.</p>
-<p>A <code>sample</code> returns a random sample from the stochastic function specified. A <code>plate</code> context manager is constructed for annotating conditionally independent variables, the observations <span class="math inline">\(y_i\)</span>’s.</p>
+<p>In NumPyro, the model code can be any Python callable. The <code>sample</code> primitive draws a random sample from the stochastic function specified.</p>
 <pre class="python"><code>def hnm_mod(N, y = None):
     &quot;&quot;&quot; Estimate the posterior estiamtes of the hierarchical model given below:
         y_i | mu_i, sigma_sq ~ N(mu_i, var = sigma_sq)
@@ -790,7 +796,7 @@ import os</code></pre>
         y (array): the observed y
 
     Returns:
-        Posterior parameter estiamted by the model 
+        Float: Prediction of y by the model 
     &quot;&quot;&quot;
     # hyper-prior
     lam_tilde = po.sample(&#39;lam_tilde&#39;, dist.Normal(0., 1.))
@@ -799,11 +805,15 @@ import os</code></pre>
     # prior
     sigma_sq = po.sample(&#39;sigma_sq&#39;, dist.InverseGamma(concentration=1, rate=1))
     # Likelihood
+    # `plate` is a context manager: 
+    #   constructed for annotating conditionally independent observations y.
     with po.plate(&quot;N&quot;, N):
         y_sd = po.deterministic(&#39;y_sd&#39;, np.sqrt(sigma_sq + tau_sq))
         po.sample(&#39;Likelihood&#39;, dist.Normal(loc=lam, scale=y_sd), obs=y)</code></pre>
-<p>To check the log-posterior, <code>log_density</code> method can be applied and the model are implemented correctly.</p>
-<pre class="python"><code>#  the log_density function will return 
+<p>Note that the rate parameter in the inverse gamma distribution is actually corresponding to the scale parameter in the <a href="https://en.wikipedia.org/wiki/Inverse-gamma_distribution">literatures</a>.</p>
+<p><code>log_density</code> method will return the log-posterior of the model at given parameter values and can be applied to investigate the log-posterior against in R. The model has been convinced by random sets of parameter values. The example code is given by:</p>
+<pre class="python"><code># e.g. lam_tilde = 1.8; tau_sq = 4.6, sigma_sq = 4
+#  the log_density function will return 
 #     1. the log posterior values at the given parameter values
 #     2. and a corresponding model trace
 log_prob = util.log_density(hnm_mod, model_args=(), model_kwargs={&#39;N&#39;:N,&#39;y&#39;:y},
@@ -815,7 +825,7 @@ print(log_prob[0])</code></pre>
 <p>The sampling in NumPyro are completed by the following steps:</p>
 <ol style="list-style-type: decimal">
 <li><p>Assign the NUTS sampler to MCMC</p></li>
-<li><p>Provides access to MCMC inference algorithms in NumPyro.</p></li>
+<li><p>Provide access to MCMC inference algorithms in NumPyro.</p></li>
 <li><p>Run the NUTS sampler with a specified random number generator key.</p></li>
 </ol>
 <pre class="python"><code># MCMC sampling:
@@ -891,7 +901,7 @@ def hnm_mod(N, y = None):
         y (array): the observed y
 
     Returns:
-        Posterior parameter estiamted by the model 
+        Float: Prediction of y by the model 
     &quot;&quot;&quot;
     # hyper-prior
     lam_tilde = po.sample(&#39;lam_tilde&#39;, dist.Normal(0., 1.))

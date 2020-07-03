@@ -41,7 +41,7 @@ def hnm_mod(N, y = None):
         y (array): the observed y
 
     Returns:
-        Posterior parameter estiamted by the model 
+        Float: Prediction of y by the model 
     """
     # hyper-prior
     lam_tilde = po.sample('lam_tilde', dist.Normal(0., 1.))
