@@ -13,4 +13,6 @@ Hamiltonian Monte Carlo for Hierarchical Models
 
 6. hnm_pyro.py: NumPyro code;output are saved as trace_pyro.png and post_pyro.png
 
+7. hnm_post.rds: MCMC samples from stan_fit
+
 
