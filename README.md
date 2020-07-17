@@ -1,5 +1,4 @@
-# stat946A2
-Hamiltonian Monte Carlo for Hierarchical Models
+# Hamiltonian Monte Carlo for Hierarchical Models
 
 1. [data.txt](data.txt): simulation data
 
